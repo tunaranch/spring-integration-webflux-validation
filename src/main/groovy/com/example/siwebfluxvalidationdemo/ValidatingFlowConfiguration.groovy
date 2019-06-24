@@ -28,57 +28,57 @@ import javax.validation.constraints.NotEmpty
 @Configuration
 class ValidatingFlowConfiguration {
 
-    @Autowired
-    Validator validator
+  @Autowired
+  Validator validator
 
-    @Bean
-    Publisher<Message<String>> helloFlow() {
-        IntegrationFlows
-                .from(
-                        WebFlux
-                                .inboundGateway("/greet")
-                                .requestMapping { m ->
-                                    m
-                                            .methods(HttpMethod.POST)
-                                            .consumes(MediaType.APPLICATION_JSON_VALUE)
-                                }
-                                .requestPayloadType(ResolvableType.forClassWithGenerics(Flux, HelloRequest))
-                                .requestChannel(greetingInputChannel())
+  @Bean
+  Publisher<Message<String>> helloFlow() {
+    IntegrationFlows
+        .from(
+            WebFlux
+                .inboundGateway("/greet")
+                .requestMapping { m ->
+                  m
+                      .methods(HttpMethod.POST)
+                      .consumes(MediaType.APPLICATION_JSON_VALUE)
+                }
+                .requestPayloadType(ResolvableType.forClassWithGenerics(Flux, HelloRequest))
+                .requestChannel(greetingInputChannel())
 
 
-                )
+        )
 
-                .toReactivePublisher()
+        .toReactivePublisher()
+  }
+
+  @Bean
+  MessageChannel greetingInputChannel() {
+    return new FluxMessageChannel()
+  }
+
+  @ServiceActivator(
+      inputChannel = "greetingInputChannel"
+  )
+  Flux<String> greetingHandler(Flux<HelloRequest> seq) {
+    seq
+        .doOnNext { HelloRequest it -> validate(it) }
+        .log()
+        .map { "Hello, ${it.name}" as String }
+  }
+
+  void validate(HelloRequest request) {
+    Errors errors = new BeanPropertyBindingResult(request, "request")
+    validator.validate(request, errors);
+    if (errors.hasErrors()) {
+      throw new ServerWebInputException(errors.toString());
     }
-
-    @Bean
-    MessageChannel greetingInputChannel() {
-        return new FluxMessageChannel()
-    }
-
-    @ServiceActivator(
-            inputChannel = "greetingInputChannel"
-    )
-    Flux<String> greetingHandler(Flux<HelloRequest> seq) {
-        seq
-                .doOnNext { HelloRequest it -> validate(it) }
-                .log()
-                .map { "Hello, ${it.name}" as String }
-    }
-
-    void validate(HelloRequest request) {
-        Errors errors = new BeanPropertyBindingResult(request, "request")
-        validator.validate(request, errors);
-        if (errors.hasErrors()) {
-            throw new ServerWebInputException(errors.toString());
-        }
-    }
+  }
 }
 
 @ToString(includeNames = true)
 @Validated
 class HelloRequest {
 
-    @NotEmpty
-    String name
+  @NotEmpty
+  String name
 }
